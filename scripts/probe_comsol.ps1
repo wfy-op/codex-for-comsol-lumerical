@@ -60,6 +60,46 @@ function Set-ComsolEnv {
     $env:PATH = ($clean -join [IO.Path]::PathSeparator)
 }
 
+function ConvertTo-RedactedText {
+    param([AllowNull()]$Value)
+
+    if ($null -eq $Value) { return $null }
+    $text = [string]$Value
+    $userHome = [Environment]::GetFolderPath("UserProfile")
+    $userName = [Environment]::UserName
+    $machineName = $env:COMPUTERNAME
+    if (-not $machineName) { $machineName = [Environment]::MachineName }
+
+    if ($userHome) {
+        $text = $text -replace [regex]::Escape($userHome), "%USERPROFILE%"
+    }
+    if ($userName) {
+        $text = $text -replace [regex]::Escape($userName), "%USERNAME%"
+    }
+    if ($machineName) {
+        $text = $text -replace [regex]::Escape($machineName), "%COMPUTERNAME%"
+    }
+    $text = $text -replace "\b(\d{2,5})@(?!localhost\b|127\.0\.0\.1\b)[^;,\s]+", '$1@<redacted-host>'
+    $text
+}
+
+function ConvertTo-RedactedCommand {
+    param([string[]]$Command)
+
+    @($Command | ForEach-Object { ConvertTo-RedactedText $_ })
+}
+
+function Limit-ProbeText {
+    param([AllowNull()]$Text)
+
+    if ($null -eq $Text) { return $null }
+    $value = [string]$Text
+    if ($value.Length -gt 4000) {
+        return $value.Substring($value.Length - 4000)
+    }
+    $value
+}
+
 function Invoke-ProbeCommand {
     param(
         [string[]]$Command,
@@ -84,10 +124,10 @@ function Invoke-ProbeCommand {
     $proc.WaitForExit()
 
     [ordered]@{
-        command = $Command
+        command = (ConvertTo-RedactedCommand -Command $Command)
         returncode = $proc.ExitCode
-        stdout = $stdout
-        stderr = $stderr
+        stdout = (ConvertTo-RedactedText (Limit-ProbeText $stdout))
+        stderr = (ConvertTo-RedactedText (Limit-ProbeText $stderr))
         success = ($proc.ExitCode -eq 0)
     }
 }
@@ -98,10 +138,10 @@ Set-ComsolEnv -BinDir $ComsolBin
 
 $payload = [ordered]@{
     backend = "comsol"
-    probe_level = $(if ($Deep) { "deep_compile_run_save" } else { "version_check" })
+    probe_level = $(if ($DryRun) { "dry_run" } elseif ($Deep) { "deep_compile_run_save" } else { "version_check" })
     dry_run = [bool]$DryRun
-    comsol_batch = $comsolBatch
-    comsol_compile = $comsolCompile
+    comsol_batch = (ConvertTo-RedactedText $comsolBatch)
+    comsol_compile = (ConvertTo-RedactedText $comsolCompile)
     checks = @()
     success = $false
 }
@@ -115,7 +155,7 @@ if ($DryRun) {
     }
     $payload.success = $payload.checks[0]["success"]
     $payload | ConvertTo-Json -Depth 8
-    exit 0
+    if ($payload.success) { exit 0 } else { exit 1 }
 }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -150,8 +190,9 @@ public class ComsolProbeMinimal {
         $classPath = Join-Path $resolvedOut "ComsolProbeMinimal.class"
         $runCheck = Invoke-ProbeCommand -Command @($comsolBatch, "-inputfile", $classPath) -WorkingDirectory $resolvedOut
         $runCheck["name"] = "minimal_run_save"
-        $runCheck["expected_artifact"] = (Join-Path $resolvedOut "comsol_probe_minimal.mph")
-        $runCheck["artifact_exists"] = (Test-Path $runCheck["expected_artifact"])
+        $expectedArtifact = Join-Path $resolvedOut "comsol_probe_minimal.mph"
+        $runCheck["expected_artifact"] = (ConvertTo-RedactedText $expectedArtifact)
+        $runCheck["artifact_exists"] = (Test-Path $expectedArtifact)
         $runCheck["success"] = ($runCheck["success"] -and $runCheck["artifact_exists"])
         $payload.checks += $runCheck
     }
@@ -162,3 +203,4 @@ $json = $payload | ConvertTo-Json -Depth 10
 $jsonPath = Join-Path $resolvedOut "comsol_probe.json"
 $json | Set-Content -Encoding UTF8 -Path $jsonPath
 $json
+if ($payload.success) { exit 0 } else { exit 1 }

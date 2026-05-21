@@ -1,22 +1,22 @@
 ---
 name: codex-for-comsol-lumerical
-description: Use when connecting Codex to local COMSOL Multiphysics or Ansys Lumerical FDTD/MODE solvers, probing solver installations, normalizing Windows solver environments, running comsolbatch/comsolcompile, using lumapi or fdtd-solutions CLI, or repairing solver automation failures.
+description: Use when connecting Codex to local COMSOL Multiphysics or Ansys Lumerical FDTD solvers, probing those solver installations, normalizing Windows solver environments, running comsolbatch/comsolcompile, using lumapi or fdtd-solutions CLI, or repairing COMSOL/Lumerical automation failures.
 ---
 
 # Codex for COMSOL and Lumerical
 
 ## Overview
 
-Use this skill to make Codex operate local COMSOL and Ansys Lumerical solver installations through verified automation paths. Keep the scope to solver connection, environment setup, command execution, result export, and failure repair; do not import device-family design priors, literature notes, or project-specific geometry examples.
+Use this skill to make Codex operate local COMSOL and Ansys Lumerical FDTD solver installations through locally probed automation paths. Keep the scope to solver connection, environment setup, command execution, result export, syntax lookup, and failure repair; do not import device-family design priors, literature notes, or project-specific geometry examples.
 
 ## Workflow
 
-1. Identify the requested backend: `comsol`, `lumerical-fdtd`, `lumerical-mode`, or mixed.
+1. Identify the requested backend: `comsol`, `lumerical-fdtd`, or mixed.
 2. Load only the needed reference:
    - COMSOL batch, Java API, geometry, physics, mesh, dataset, or table export syntax: `references/comsol-automation.md`.
-   - Lumerical FDTD/MODE, `lumapi`, object creation, monitor, Qanalysis, material, or LSF CLI syntax: `references/lumerical-fdtd-automation.md`.
-   - Local profile names and expected executable paths: `references/solver-profiles.json`.
-3. Probe before real work unless the same profile was verified in the current session.
+   - Lumerical FDTD, `lumapi`, object creation, monitor, Qanalysis, material, or LSF CLI syntax: `references/lumerical-fdtd-automation.md`.
+   - Example profile names and expected profile fields: `references/solver-profiles.json`.
+3. Probe before real work unless the same profile already passed in the current session.
 4. Normalize the Windows environment before launching solver binaries.
 5. Run the smallest viable operation first: version check, import check, session start, or compile/run/save probe.
 6. Store raw stdout/stderr, generated scripts, result files, and probe JSON near the job artifacts.
@@ -27,22 +27,26 @@ Use this skill to make Codex operate local COMSOL and Ansys Lumerical solver ins
 Run dry-run checks first:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/probe_comsol.ps1 -DryRun
-python scripts/probe_lumerical.py --dry-run
+$skill = "C:\path\to\codex-for-comsol-lumerical"
+$out = ".\solver_probe_out"
+powershell -ExecutionPolicy Bypass -File "$skill\scripts\probe_comsol.ps1" -DryRun -OutDir "$out\comsol"
+py -3 "$skill\scripts\probe_lumerical.py" --dry-run --out-dir "$out\lumerical"
 ```
 
 Run deeper probes only when the user expects local solver startup:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/probe_comsol.ps1 -Deep -OutDir .\solver_probe_out\comsol
-python scripts/probe_lumerical.py --deep --out-dir .\solver_probe_out\lumerical
-python scripts/probe_lumerical.py --cli --deep --out-dir .\solver_probe_out\lumerical_cli
+$skill = "C:\path\to\codex-for-comsol-lumerical"
+$out = ".\solver_probe_out"
+powershell -ExecutionPolicy Bypass -File "$skill\scripts\probe_comsol.ps1" -Deep -OutDir "$out\comsol"
+py -3 "$skill\scripts\probe_lumerical.py" --deep --out-dir "$out\lumerical"
+py -3 "$skill\scripts\probe_lumerical.py" --cli --deep --out-dir "$out\lumerical_cli"
 ```
 
-On this Windows machine, prefer the Anaconda environment Python when available:
+Resolve `scripts/` relative to this skill folder. Run probes from the caller job/artifact directory and set `-OutDir` or `--out-dir` explicitly so generated probe files do not land inside the skill repository. If `py -3` is not available, use a user-selected Python, for example:
 
 ```powershell
-C:\ProgramData\anaconda3\envs\AI_group\python.exe scripts/probe_lumerical.py --deep
+conda run -n <env> python "$skill\scripts\probe_lumerical.py" --dry-run --out-dir "$out\lumerical"
 ```
 
 ## COMSOL Defaults
@@ -52,7 +56,7 @@ C:\ProgramData\anaconda3\envs\AI_group\python.exe scripts/probe_lumerical.py --d
 - Avoid MPh Python on the recorded Windows installation because it was observed to crash.
 - Use table-format `-paramfile`, not key-value format.
 - If a Java postprocessor loads a model from another directory, use explicit output paths for table exports.
-- For syntax-sensitive work, read the COMSOL reference before writing Java API calls. It contains verified patterns for `Block`, `Cylinder`, `Difference`, `Box`, `Ball`, `Union`, `ElectromagneticWavesFrequencyDomain`, `Scattering`, PML coordinate systems, `FreeTet`, `EvalGlobal`, `IntVolume`, and table export.
+- For syntax-sensitive work, read the COMSOL reference before writing Java API calls. It contains recorded patterns for `Block`, `Cylinder`, `Difference`, `Box`, `Ball`, `Union`, `ElectromagneticWavesFrequencyDomain`, `Scattering`, PML coordinate systems, `FreeTet`, `EvalGlobal`, `IntVolume`, and table export.
 
 ## Lumerical Defaults
 
@@ -61,7 +65,13 @@ C:\ProgramData\anaconda3\envs\AI_group\python.exe scripts/probe_lumerical.py --d
 - Prepend the Lumerical `bin` and `licensingclient/winx64` directories to `PATH`.
 - Keep `fdtd-solutions.exe -run <script.lsf>` as a CLI fallback.
 - Use `.txt` as the safe LSF sentinel/export extension, then convert to JSON in Python if needed.
-- For syntax-sensitive work, read the Lumerical reference before writing Python or LSF calls. It contains verified patterns for `addrect`, `addcircle`, `addring`, `addfdtd`, `addpower`, `addanalysisgroup`, `addobject("Qanalysis")`, `setnamed`, `getresult`, `getdata`, `farfield3d`, sampled materials, and LSF setup scripts.
+- For syntax-sensitive work, read the Lumerical reference before writing Python or LSF calls. It contains recorded patterns for `addrect`, `addcircle`, `addring`, `addfdtd`, `addpower`, `addanalysisgroup`, `addobject("Qanalysis")`, `setnamed`, `getresult`, `getdata`, `farfield3d`, sampled materials, and LSF setup scripts.
+
+## Not In Scope
+
+- Only Lumerical FDTD automation is covered. Add a separate reference before using any other Lumerical product workflow.
+- Device-family design priors, paper reproduction logic, and project-specific geometry templates do not belong in this skill.
+- Do not use this skill as evidence that a solver profile is ready on another machine; always run a local probe first.
 
 ## Failure Repair
 
@@ -73,7 +83,7 @@ Return compact JSON patches for repair proposals:
   "target": "lumerical",
   "env_key": "ANSYSLMD_LICENSE_FILE",
   "env_value": "1055@localhost",
-  "reason": "FDTD session startup failed with a license/session error; the verified local profile needs an explicit license server."
+  "reason": "FDTD session startup failed with a license/session error; the current local profile needs an explicit license server."
 }
 ```
 

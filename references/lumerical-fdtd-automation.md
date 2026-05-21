@@ -1,14 +1,26 @@
 # Lumerical FDTD Automation Reference
 
-Use this reference for Ansys Lumerical `lumapi`, FDTD/MODE session startup, LSF CLI fallback, and script-level result extraction.
+Use this reference for Ansys Lumerical FDTD `lumapi`, FDTD session startup, LSF CLI fallback, and script-level result extraction.
 
-## Verified Local Environment
+## Contents
 
-- Preferred Python API profile: `lumapi-python-v241-local-license`
+- Recorded local example
+- Environment normalization and import
+- Session lifecycle
+- Object creation and v241 local workarounds
+- CLI fallback and LSF script syntax
+- Source, monitor, and far-field syntax
+- Qanalysis and data retrieval
+- Sampled material data
+- Failure signatures
+
+## Recorded Local Example
+
+- Preferred Python API profile: `lumapi-python-fdtd-example`
 - API path: `C:\Program Files\Lumerical\v241\api\python\lumapi.py`
 - CLI fallback: `C:\Program Files\Lumerical\v241\bin\fdtd-solutions.exe`
-- License server used by the verified profile: `1055@localhost`
-- Historical v242 syntax lessons remain useful, but probe the local v241 installation first.
+- Example local license value: `1055@localhost`
+- Treat this as a syntax example, not proof that another machine is ready. Probe the local installation first.
 
 ## Environment Normalization
 
@@ -19,7 +31,7 @@ import os
 import socket
 from pathlib import Path
 
-api_path = Path(r"C:\Program Files\Lumerical\v241\api\python\lumapi.py")
+api_path = Path(os.environ.get("LUMERICAL_PYTHON_API", r"C:\Program Files\Lumerical\v241\api\python\lumapi.py"))
 install_root = api_path.parents[2]
 os.environ["PATH"] = os.pathsep.join([
     str(install_root / "bin"),
@@ -29,7 +41,7 @@ os.environ["PATH"] = os.pathsep.join([
 os.environ["Path"] = os.environ["PATH"]
 os.environ.setdefault("LUMERICAL_ROOT", str(install_root))
 os.environ.setdefault("LUMERICAL_PYTHON_API", str(api_path))
-os.environ.setdefault("ANSYSLMD_LICENSE_FILE", "1055@localhost")
+os.environ["ANSYSLMD_LICENSE_FILE"] = os.environ.get("ANSYSLMD_LICENSE_FILE", "1055@localhost")
 os.environ.setdefault("COMPUTERNAME", socket.gethostname().split(".")[0])
 ```
 
@@ -57,13 +69,21 @@ finally:
 
 If `lumapi.FDTD()` fails with a session or license error, set `ANSYSLMD_LICENSE_FILE`, prepend the Lumerical binary and licensing client directories to `PATH`, and retry once.
 
+For headless automation, probe whether the local version accepts:
+
+```python
+fdtd = lumapi.FDTD(hide=True)
+# or, if the local profile supports server arguments:
+fdtd = lumapi.FDTD(serverArgs={"platform": "offscreen"})
+```
+
 ## Object Creation
 
-Use attribute assignment or session-level `setnamed`. On the verified v241 installation, `SimObject` wrappers do not expose a reliable `obj.set(...)`.
+Use attribute assignment or session-level `setnamed`. On one recorded v241 local profile, `SimObject` wrappers did not expose a reliable `obj.set(...)`; treat this as a local workaround, not a universal Lumerical rule.
 
 ## lumapi Syntax Map
 
-| Task | Verified syntax |
+| Task | Recorded syntax |
 | --- | --- |
 | Start FDTD | `fdtd = lumapi.FDTD()` |
 | Layout mode | `fdtd.switchtolayout()` |
@@ -133,11 +153,11 @@ except Exception:
     fdtd.setnamed("layer_1", "mesh order", 3)
 ```
 
-Do not rename the object returned by `addfdtd()` on the verified v241 installation. The `name` property can be inactive and may leave the wrapper pointing to a stale object id.
+On one recorded v241 local profile, renaming the object returned by `addfdtd()` was unreliable. When this local behavior appears, keep the default region name and use the returned object id.
 
 ```python
 region = fdtd.addfdtd()
-region_name = region._id.name
+region_name = getattr(getattr(region, "_id", None), "name", "::model::FDTD")
 region.dimension = "3D"
 region.x_span = 2e-6
 region.y_span = 2e-6
@@ -160,7 +180,7 @@ Useful creation calls:
 | FDTD region | `fdtd.addfdtd()` |
 | Structure group | `fdtd.addstructuregroup()` |
 | Analysis group | `fdtd.addanalysisgroup()` |
-| Power monitor | `fdtd.addpower()` |
+| Power monitor | `fdtd.addpower()`; newer versions may prefer `fdtd.adddftmonitor()` |
 | Q analysis | `fdtd.addobject("Qanalysis")` |
 
 Structure group and grouping syntax:
@@ -187,8 +207,10 @@ fdtd.setnamed("::model::group_1::member_1", "mesh order", 2)
 Use CLI LSF runs when Python API session startup is blocked:
 
 ```powershell
-& 'C:\Program Files\Lumerical\v241\bin\fdtd-solutions.exe' -run .\script.lsf
+& 'C:\Program Files\Lumerical\v241\bin\fdtd-solutions.exe' -hide -run .\script.lsf -exit
 ```
+
+Use `-trust-script` only when the script needs trusted filesystem/resource access and the script source is known.
 
 Safe sentinel example:
 
@@ -252,7 +274,7 @@ fdtd.setglobalmonitor("frequency points", 401)
 Top monitor:
 
 ```python
-mon = fdtd.addpower()
+mon = fdtd.addpower()  # or fdtd.adddftmonitor() on newer versions
 mon.name = "mon_top"
 mon.monitor_type = "2D Z-normal"
 mon.x = 0
@@ -331,10 +353,16 @@ else:
 Retrieve results:
 
 ```python
+import numpy as np
+
+c0 = 299792458.0
 res = fdtd.getresult("Q_analysis", "Q")
-q_values = res.get("Q", [])
-lambda_values = res.get("lambda", [])
+q_values = np.asarray(res.get("Q", []), dtype=float).reshape(-1)
+freq_values = np.asarray(res.get("f", []), dtype=float).reshape(-1)
+lambda_m = c0 / freq_values if freq_values.size else np.asarray(res.get("lambda", []), dtype=float).reshape(-1)
 ```
+
+Prefer `f` and `Q` for portable Qanalysis extraction. A `lambda` key may exist in some local results, but do not rely on it; compute `lambda_m = c/f` when `f` is available.
 
 Make sure `t start` is inside the actual simulation time window when running short smoke tests.
 
@@ -377,23 +405,31 @@ answer = fdtd.getv("answer")
 
 ## Sampled Material Data
 
-For sampled wavelength-dependent material data, cast all columns to `float64` before passing data to Lumerical:
+For portable sampled materials, prefer the official `Sampled data` material and set sampled data as frequency plus complex permittivity. The sampled data matrix has 2 columns for isotropic materials or 4 columns for anisotropic materials; the first column is frequency in Hz, and the remaining column(s) are complex-valued permittivity. If the source data is wavelength, n, and k, convert first:
 
 ```python
 import numpy as np
 
-mat = fdtd.addmaterial("Sampled 3D data")
-fdtd.setmaterial(mat, "name", "Material_Custom")
-fdtd.setmaterial("Material_Custom", "wavelength min", float(wavelength_m.min()))
-fdtd.setmaterial("Material_Custom", "wavelength max", float(wavelength_m.max()))
-data = np.column_stack([
-    wavelength_m.astype(np.float64),
-    n_values.astype(np.float64),
-    k_values.astype(np.float64),
-    np.zeros(len(wavelength_m), dtype=np.float64),
+wl_m = wavelength_m.astype(np.float64)
+n = n_values.astype(np.float64)
+k = k_values.astype(np.float64)
+c0 = 299792458.0
+freq_hz = c0 / wl_m
+eps_complex = (n + 1j * k) ** 2
+
+# Sort by ascending frequency for a predictable material table.
+order = np.argsort(freq_hz)
+sampled_data = np.column_stack([
+    freq_hz[order].astype(np.float64),
+    eps_complex[order].astype(np.complex128),
 ])
-fdtd.setmaterial("Material_Custom", "sampled 3d data", data)
+
+mat = fdtd.addmaterial("Sampled data")
+fdtd.setmaterial(mat, "name", "Material_Custom")
+fdtd.setmaterial("Material_Custom", "sampled data", sampled_data)
 ```
+
+Lumerical material-property names vary by version. Before using sampled materials in production, run a small material probe such as `fdtd.eval('?setmaterial("Material_Custom");')` or inspect the material properties in the GUI/API.
 
 Materials are stored per `.fsp`; copy sampled material data into the destination file before assigning it to objects there.
 
@@ -402,16 +438,12 @@ Copy material data between `.fsp` files:
 ```python
 base = lumapi.FDTD(str(base_fsp))
 src = lumapi.FDTD(str(source_fsp))
-mat_data = src.getmaterial("Material_Custom", "sampled 3d data")
-wl_min = src.getmaterial("Material_Custom", "wavelength min")
-wl_max = src.getmaterial("Material_Custom", "wavelength max")
+mat_data = src.getmaterial("Material_Custom", "sampled data")
 src.close()
 
-mat = base.addmaterial("Sampled 3D data")
+mat = base.addmaterial("Sampled data")
 base.setmaterial(mat, "name", "Material_Custom")
-base.setmaterial("Material_Custom", "wavelength min", wl_min)
-base.setmaterial("Material_Custom", "wavelength max", wl_max)
-base.setmaterial("Material_Custom", "sampled 3d data", mat_data)
+base.setmaterial("Material_Custom", "sampled data", mat_data)
 ```
 
 ## Failure Signatures
@@ -420,7 +452,7 @@ base.setmaterial("Material_Custom", "sampled 3d data", mat_data)
 | --- | --- | --- |
 | `Session not found` from `appOpened` | API startup or license environment | Set `ANSYSLMD_LICENSE_FILE`, prepend Lumerical binary/licensing paths, set `COMPUTERNAME`, retry once. |
 | `No module named lumapi` | Python API path not loaded | Add the local `api/python` directory to `sys.path` or set `LUMERICAL_PYTHON_API`. |
-| `obj.set` missing | v241 wrapper API difference | Use attribute assignment or `fdtd.setnamed(...)`. |
-| `name` change on FDTD region fails or breaks wrapper | v241 inactive property | Keep the default FDTD region name and use `region._id.name`. |
+| `obj.set` missing | v241 local wrapper API difference | Use attribute assignment or `fdtd.setnamed(...)`. |
+| `name` change on FDTD region fails or breaks wrapper | v241 local inactive property | Keep the default FDTD region name and use the returned object id. |
 | LSF cannot write requested extension | safe-mode extension block | Write `.txt` from LSF, postprocess to JSON in Python. |
 | `runanalysis()` fails in a short smoke run | analysis start time outside simulation window | Clamp analysis start time to a fraction of the configured simulation time. |

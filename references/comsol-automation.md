@@ -2,13 +2,29 @@
 
 Use this reference for local COMSOL connection checks, Java API probes, batch runs, and result-table exports.
 
-## Verified Local Environment
+## Contents
+
+- Recorded local example
+- Windows environment normalization
+- Command line
+- Minimal Java API probe
+- Model load/remove lifecycle
+- Generic Java API patterns
+- Selections and materials
+- Physics syntax
+- Mesh syntax
+- Result and table export
+- Far-field function export
+- Failure signatures
+
+## Recorded Local Example
 
 - COMSOL: `6.3.0.290`
 - Batch executable: `C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolbatch.exe`
 - Java compiler wrapper: `C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolcompile.exe`
 - Preferred workflow: write Java API file, compile with `comsolcompile.exe`, run the `.class` with `comsolbatch.exe`.
 - Avoid MPh Python on the recorded Windows installation because it was observed to crash.
+- Treat this as a recorded example, not a portable ready-to-use profile. Run `scripts/probe_comsol.ps1` locally before trusting a profile.
 
 ## Windows Environment Normalization
 
@@ -78,13 +94,33 @@ public class ComsolProbeMinimal {
 
 Expected artifact: `comsol_probe_minimal.mph`.
 
+COMSOL batch can create a sibling model artifact such as `*_Model.mph` when running a compiled Java class, even when the Java code also calls `model.save(...)`. Treat unexpected solver output files as local artifacts and keep them out of source control.
+
+## Java Sandbox Notes
+
+Use explicit paths from the calling script rather than relying on Java-side discovery. In batch execution, avoid using `System.getProperty("user.dir")` as a source of truth for export paths, and do not delete or probe unrelated files from inside COMSOL Java. Pre-clean known output files in the wrapper script before launching COMSOL.
+
+## Model Load and Remove
+
+Load an existing model with a stable tag, then remove it when finished so repeated batch runs do not collide:
+
+```java
+Model model = ModelUtil.load("post", "C:\\path\\to\\input_model.mph");
+try {
+    model.study("std1").run();
+    model.save("C:\\path\\to\\output_model.mph");
+} finally {
+    ModelUtil.remove("post");
+}
+```
+
 ## Generic Java API Patterns
 
 Use this section as a syntax lookup before writing or repairing COMSOL Java builders. The examples are intentionally generic and are not tied to any device family.
 
 ## Java API Syntax Map
 
-| Task | Verified syntax |
+| Task | Recorded syntax |
 | --- | --- |
 | Create model | `Model model = ModelUtil.create("Model");` |
 | Create component | `model.component().create("comp1", true);` |
@@ -212,7 +248,7 @@ model.component("comp1").material("mat_default").propertyGroup("def")
      .set("relpermittivity", new String[]{"(n_mat+k_mat*i)^2"});
 ```
 
-There is no reliable Java API material-database shortcut in the verified local profile. Avoid `materialRef()`, `MaterialUtil.addMaterial()`, and `model.materialDatabase()`; define properties manually or use interpolation/table data.
+There is no reliable Java API material-database shortcut in the recorded local profile. Avoid `materialRef()`, `MaterialUtil.addMaterial()`, and `model.materialDatabase()`; define properties manually or use interpolation/table data.
 
 ## Physics Syntax
 
@@ -233,6 +269,8 @@ model.component("comp1").physics("ewfd").feature("pc1").set("kFloquet", new Stri
 
 Use dimension argument `1` for 2D boundaries and `2` for 3D faces.
 
+For two independent periodic directions, create two separate `PeriodicCondition` features and bind each one to its own paired-boundary selection. Do not combine x- and y-direction boundary pairs into a single Floquet feature unless the local model has proven that combined selection behaves correctly.
+
 Scattering boundary condition:
 
 ```java
@@ -251,6 +289,8 @@ model.component("comp1").coordSystem("pml1").selection().named("sel_pml");
 model.component("comp1").coordSystem("pml1").set("ScalingType", "Cartesian");
 ```
 
+Keep PML domains in an explicit selection that is separate from the physical region. Exclude PML selections from mode-energy integrals, normalization denominators, and any postprocessing metric that is meant to describe the modeled physical domain.
+
 Far-field domain and child calculation:
 
 ```java
@@ -259,6 +299,8 @@ model.component("comp1").physics("ewfd").feature("ffd1").selection().named("sel_
 model.component("comp1").physics("ewfd").feature("ffd1").feature("ffc1").set("FarName", "Efar");
 model.component("comp1").physics("ewfd").feature("ffd1").feature("ffc1").selection().named("sel_farfield_boundary");
 ```
+
+`ffc1` is the common child tag created by `FarFieldDomain` in the recorded pattern. If a local model throws an unknown-feature error, inspect the child feature tags for `ffd1` and update only that child tag.
 
 Create an eigenfrequency study:
 
@@ -297,6 +339,8 @@ model.component("comp1").mesh("mesh1").run();
 
 Use explicit `FreeTet` sizing for thin 3D stacks or highly unequal dimensions.
 
+## Result and Table Export
+
 Export global results:
 
 ```java
@@ -306,6 +350,7 @@ model.result().numerical("gev1").set("expr", new String[]{
     "real(freq)",
     "imag(freq)",
     "c_const/real(freq)/1[nm]",
+    "real(freq)/(2*imag(freq))",
     "abs(real(freq)/(2*imag(freq)))"
 });
 model.result().table().create("tbl1", "Table");
@@ -334,6 +379,13 @@ model.result().numerical().create("iv1", "IntVolume");
 model.result().numerical("iv1").set("data", "dset1");
 model.result().numerical("iv1").selection().named("sel_region");
 model.result().numerical("iv1").set("expr", new String[]{"ewfd.normE^2"});
+model.result().table().create("tbl_iv", "Table");
+model.result().numerical("iv1").set("table", "tbl_iv");
+model.result().numerical("iv1").setResult();
+model.result().export().create("iv_export", "Table");
+model.result().export("iv_export").set("table", "tbl_iv");
+model.result().export("iv_export").set("filename", "volume_integral.txt");
+model.result().export("iv_export").run();
 ```
 
 Useful eigenfrequency expressions:
@@ -344,11 +396,12 @@ new String[]{
     "imag(freq)",
     "c_const/real(freq)/1[nm]",
     "ewfd.Qfactor",
+    "real(freq)/(2*imag(freq))",
     "abs(real(freq)/(2*imag(freq)))"
 }
 ```
 
-Use global `freq` for complex-frequency formula cross-checks. Some model exports expose `ewfd.Qfactor`; if it is unavailable, compute `abs(real(freq)/(2*imag(freq)))`.
+Use global `freq` for complex-frequency formula cross-checks. Some model exports expose `ewfd.Qfactor`; if it is unavailable, compute both the signed value `real(freq)/(2*imag(freq))` and the magnitude `abs(real(freq)/(2*imag(freq)))`. The sign depends on the eigenfrequency convention and solver setup; use the magnitude for a portable nonnegative Q column unless the sign is being audited.
 
 ## Far-Field Function Export
 

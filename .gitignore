@@ -1,3 +1,21 @@
 solver_probe_out/
+solver_probe_out*/
+**/solver_probe_out/
+**/solver_probe_out*/
+
 *.log
 *.tmp
+*.bak
+
+# Solver-generated local artifacts
+*.mph
+*.fsp
+*.class
+*.class.status
+*.class.recovery
+*.lsf
+*.xml
+*_probe.json
+ComsolProbeMinimal.java
+__pycache__/
+**/__pycache__/

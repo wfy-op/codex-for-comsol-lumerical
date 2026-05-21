@@ -1,36 +1,45 @@
 {
   "comsol": {
-    "preferred_profile": "comsol-batch-basic",
+    "preferred_profile": "comsol-batch-basic-example",
     "profiles": [
       {
-        "name": "comsol-batch-basic",
-        "status": "verified",
+        "name": "comsol-batch-basic-example",
+        "status": "example",
         "type": "command",
-        "executable": "C:\\Program Files\\COMSOL\\COMSOL63\\Multiphysics\\bin\\win64\\comsolbatch.exe",
-        "compiler": "C:\\Program Files\\COMSOL\\COMSOL63\\Multiphysics\\bin\\win64\\comsolcompile.exe",
-        "version": "6.3.0.290",
-        "command": "{executable} -inputfile {input_file} -outputfile {output_file} -study {study}"
+        "executable_env": "COMSOL_BATCH",
+        "compiler_env": "COMSOL_COMPILE",
+        "executable": "%COMSOL_BATCH%",
+        "compiler": "%COMSOL_COMPILE%",
+        "command": "{executable} -inputfile {input_file} -outputfile {output_file} -study {study}",
+        "verification": "Run scripts/probe_comsol.ps1 locally before trusting this profile."
       }
     ]
   },
   "lumerical": {
-    "preferred_profile": "lumapi-python-v241-local-license",
+    "preferred_profile": "lumapi-python-fdtd-example",
     "profiles": [
       {
-        "name": "lumapi-python-v241-local-license",
-        "status": "verified",
+        "name": "lumapi-python-fdtd-example",
+        "status": "example",
         "type": "python",
-        "api_path": "C:\\Program Files\\Lumerical\\v241\\api\\python\\lumapi.py",
+        "api_path_env": "LUMERICAL_PYTHON_API",
+        "api_path": "%LUMERICAL_PYTHON_API%",
         "product": "FDTD",
-        "license_server": "1055@localhost",
-        "server_args": {}
+        "license_env": "ANSYSLMD_LICENSE_FILE",
+        "license_server": "%ANSYSLMD_LICENSE_FILE%",
+        "server_args": {},
+        "verification": "Run scripts/probe_lumerical.py locally before trusting this profile."
       },
       {
-        "name": "lumerical-v241-cli-lsf",
-        "status": "verified",
+        "name": "lumerical-fdtd-cli-lsf-example",
+        "status": "candidate",
         "type": "cli_lsf",
-        "executable": "C:\\Program Files\\Lumerical\\v241\\bin\\fdtd-solutions.exe",
-        "license_server": "1055@localhost"
+        "executable_env": "LUMERICAL_FDTD_EXECUTABLE",
+        "executable": "%LUMERICAL_FDTD_EXECUTABLE%",
+        "license_env": "ANSYSLMD_LICENSE_FILE",
+        "license_server": "%ANSYSLMD_LICENSE_FILE%",
+        "command": "{executable} -hide -run {script_file} -exit",
+        "verification": "Use this only as a fallback when lumapi startup is blocked; run a sentinel LSF probe first."
       }
     ]
   }
