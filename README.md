@@ -23,6 +23,30 @@ git clone https://github.com/wfy-op/codex-for-comsol-lumerical.git "$env:USERPRO
 
 Then ask Codex to use `$codex-for-comsol-lumerical` when working with local COMSOL or Lumerical FDTD automation.
 
+## Operating Workflow
+
+Use the skill from the workspace where your solver job should write artifacts, not from inside the skill repository.
+
+1. Choose the backend: COMSOL, Lumerical FDTD, or a mixed COMSOL/FDTD workflow.
+2. Run a dry probe first. This checks executable/API paths and environment setup without starting a full solver job.
+3. If the dry probe passes, run the smallest deeper probe needed for the task. For COMSOL, use the deep probe before Java API or batch work. For Lumerical, use the deep `lumapi` probe before Python automation, or the CLI probe when `lumapi` startup is blocked.
+4. Read only the relevant reference file before writing solver syntax:
+   - COMSOL Java API, batch, geometry, physics, mesh, Q, and table export: `references/comsol-automation.md`
+   - Lumerical FDTD `lumapi`, LSF, object creation, Qanalysis, far-field, data extraction, and sampled materials: `references/lumerical-fdtd-automation.md`
+   - Example profile fields: `references/solver-profiles.json`
+5. Run the real solver task only after the needed probe level has passed. Keep generated scripts, stdout/stderr, exported tables, and probe JSON in the job artifact folder.
+6. If a solver call fails, classify the failure, propose the smallest repair as a compact JSON patch, apply one safe retry when appropriate, and record the final lesson in the caller project rather than in this skill.
+
+Example Codex request:
+
+```text
+Use $codex-for-comsol-lumerical to probe local COMSOL, then write a Java API postprocessor that loads my model and exports a result table.
+```
+
+```text
+Use $codex-for-comsol-lumerical to check Lumerical FDTD automation, then repair my lumapi script so it can read Qanalysis and far-field results.
+```
+
 ## Quick Probes
 
 Run dry-run checks before starting a real solver session:
