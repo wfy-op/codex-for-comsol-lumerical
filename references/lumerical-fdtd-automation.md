@@ -61,6 +61,22 @@ If `lumapi.FDTD()` fails with a session or license error, set `ANSYSLMD_LICENSE_
 
 Use attribute assignment or session-level `setnamed`. On the verified v241 installation, `SimObject` wrappers do not expose a reliable `obj.set(...)`.
 
+## lumapi Syntax Map
+
+| Task | Verified syntax |
+| --- | --- |
+| Start FDTD | `fdtd = lumapi.FDTD()` |
+| Layout mode | `fdtd.switchtolayout()` |
+| Execute LSF | `fdtd.eval("addrect;")` |
+| Save project | `fdtd.save(str(fsp_path))` |
+| Run simulation | `fdtd.run()` |
+| Run analysis | `fdtd.runanalysis()` |
+| Read result dict | `fdtd.getresult("object", "result")` |
+| Read raw data | `fdtd.getdata("monitor", "Ex")` |
+| Read script variable | `fdtd.getv("var_name")` |
+| Set named property | `fdtd.setnamed("object", "property name", value)` |
+| Close session | `fdtd.close()` |
+
 ```python
 rect = fdtd.addrect()
 rect.name = "layer_1"
@@ -73,6 +89,48 @@ rect.z_span = 220e-9
 rect.material = "<Object defined dielectric>"
 rect.index = 3.4
 fdtd.setnamed("layer_1", "mesh order", 3)
+```
+
+Circle object:
+
+```python
+disk = fdtd.addcircle()
+disk.name = "disk_1"
+disk.x = 0
+disk.y = 0
+disk.z = 0
+disk.radius = 200e-9
+disk.z_span = 220e-9
+disk.material = "<Object defined dielectric>"
+disk.index = 1.5
+```
+
+Ring object:
+
+```python
+ring = fdtd.addring()
+ring.name = "ring_1"
+ring.x = 0
+ring.y = 0
+ring.z = 0
+ring.inner_radius = 300e-9
+ring.outer_radius = 450e-9
+ring.z_span = 220e-9
+ring.material = "<Object defined dielectric>"
+ring.index = 1.5
+```
+
+Mesh-order fallbacks:
+
+```python
+try:
+    rect.override_mesh_order = 1
+except Exception:
+    pass
+try:
+    rect.mesh_order = 3
+except Exception:
+    fdtd.setnamed("layer_1", "mesh order", 3)
 ```
 
 Do not rename the object returned by `addfdtd()` on the verified v241 installation. The `name` property can be inactive and may leave the wrapper pointing to a stale object id.
@@ -105,6 +163,25 @@ Useful creation calls:
 | Power monitor | `fdtd.addpower()` |
 | Q analysis | `fdtd.addobject("Qanalysis")` |
 
+Structure group and grouping syntax:
+
+```python
+group = fdtd.addstructuregroup()
+group.name = "group_1"
+group.x = group.y = group.z = 0
+
+obj = fdtd.addrect()
+obj.name = "member_1"
+fdtd.select("member_1")
+fdtd.addtogroup("group_1")
+```
+
+For grouped objects, prefer full paths with `setnamed`:
+
+```python
+fdtd.setnamed("::model::group_1::member_1", "mesh order", 2)
+```
+
 ## CLI Fallback
 
 Use CLI LSF runs when Python API session startup is blocked:
@@ -121,6 +198,48 @@ exit;
 ```
 
 In safe-mode contexts, arbitrary extensions can be rejected. Write `.txt` from LSF and convert to JSON in Python after the run.
+
+## LSF Script Syntax
+
+Use Lumerical script language inside `fdtd.eval(...)`, CLI `.lsf` files, and analysis-group setup scripts. It is not Python.
+
+```lsf
+addrect;
+set("name", "layer_from_lsf");
+set("x span", 2e-6);
+set("y span", 2e-6);
+set("z span", 220e-9);
+set("material", "<Object defined dielectric>");
+set("index", 3.4);
+```
+
+Analysis group setup script for sources:
+
+```python
+src = fdtd.addanalysisgroup()
+src.name = "source_group"
+src.setup_script = """
+deleteall;
+adddipole;
+set("x", 0);
+set("y", 0);
+set("z", 0);
+set("dipole type", "Electric dipole");
+set("theta", 90);
+set("phi", 0);
+set("override global source settings", 0);
+"""
+```
+
+LSF loops use Lumerical syntax:
+
+```lsf
+for(i=1:3) {
+  addrect;
+  set("name", "rect_"+num2str(i));
+  set("x", i*1e-7);
+}
+```
 
 ## Global Source and Monitor Settings
 
@@ -143,6 +262,13 @@ mon.x_span = 2e-6
 mon.y_span = 2e-6
 ```
 
+If direct attribute assignment fails for monitor properties with spaces, use `setnamed`:
+
+```python
+fdtd.setnamed("mon_top", "monitor type", "2D Z-normal")
+fdtd.setnamed("mon_top", "override global monitor settings", 0)
+```
+
 Far-field projection:
 
 ```python
@@ -156,6 +282,27 @@ e2 = fdtd.getv("ff_E2")
 ux = fdtd.getv("ff_ux")
 uy = fdtd.getv("ff_uy")
 ```
+
+Periodic projection with an explicit finite aperture in period counts:
+
+```python
+fidx = 1
+resolution = 801
+periods_x = 100
+periods_y = 100
+index = 1
+direction = 1
+illumination = 2
+fdtd.eval('farfieldsettings("far field filter",0);')
+fdtd.eval(
+    f'ff_E2=farfield3d("mon_top",{fidx},{resolution},{resolution},'
+    f'{illumination},{periods_x},{periods_y},{index},{direction});'
+    f'ff_ux=farfieldux("mon_top",{fidx},{resolution},{resolution},{index});'
+    f'ff_uy=farfielduy("mon_top",{fidx},{resolution},{resolution},{index});'
+)
+```
+
+For non-periodic projections, omit the `illumination`, period-count, index, and direction arguments unless the Lumerical command requires them for the specific monitor.
 
 ## Q Analysis
 
@@ -191,6 +338,43 @@ lambda_values = res.get("lambda", [])
 
 Make sure `t start` is inside the actual simulation time window when running short smoke tests.
 
+When attribute assignment for `t start` is unreliable, set it after selection:
+
+```python
+fdtd.select("Q_analysis")
+fdtd.set("t start", 50e-15)
+```
+
+or:
+
+```python
+fdtd.setnamed("Q_analysis", "t start", 50e-15)
+```
+
+## Data Retrieval
+
+Use `getdata` for monitor arrays:
+
+```python
+z = fdtd.getdata("profile_z", "z")
+ex = fdtd.getdata("profile_z", "Ex")
+ey = fdtd.getdata("profile_z", "Ey")
+ez = fdtd.getdata("profile_z", "Ez")
+```
+
+Use `getresult` for analysis/result dictionaries:
+
+```python
+result = fdtd.getresult("Q_analysis", "Q")
+```
+
+Use `getv` for variables created by `fdtd.eval(...)`:
+
+```python
+fdtd.eval('answer=42;')
+answer = fdtd.getv("answer")
+```
+
 ## Sampled Material Data
 
 For sampled wavelength-dependent material data, cast all columns to `float64` before passing data to Lumerical:
@@ -212,6 +396,23 @@ fdtd.setmaterial("Material_Custom", "sampled 3d data", data)
 ```
 
 Materials are stored per `.fsp`; copy sampled material data into the destination file before assigning it to objects there.
+
+Copy material data between `.fsp` files:
+
+```python
+base = lumapi.FDTD(str(base_fsp))
+src = lumapi.FDTD(str(source_fsp))
+mat_data = src.getmaterial("Material_Custom", "sampled 3d data")
+wl_min = src.getmaterial("Material_Custom", "wavelength min")
+wl_max = src.getmaterial("Material_Custom", "wavelength max")
+src.close()
+
+mat = base.addmaterial("Sampled 3D data")
+base.setmaterial(mat, "name", "Material_Custom")
+base.setmaterial("Material_Custom", "wavelength min", wl_min)
+base.setmaterial("Material_Custom", "wavelength max", wl_max)
+base.setmaterial("Material_Custom", "sampled 3d data", mat_data)
+```
 
 ## Failure Signatures
 

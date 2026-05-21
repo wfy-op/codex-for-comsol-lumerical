@@ -80,6 +80,23 @@ Expected artifact: `comsol_probe_minimal.mph`.
 
 ## Generic Java API Patterns
 
+Use this section as a syntax lookup before writing or repairing COMSOL Java builders. The examples are intentionally generic and are not tied to any device family.
+
+## Java API Syntax Map
+
+| Task | Verified syntax |
+| --- | --- |
+| Create model | `Model model = ModelUtil.create("Model");` |
+| Create component | `model.component().create("comp1", true);` |
+| Create 2D geometry | `model.component("comp1").geom().create("geom1", 2);` |
+| Create 3D geometry | `model.component("comp1").geom().create("geom1", 3);` |
+| Set length unit | `model.component("comp1").geom("geom1").lengthUnit("nm");` |
+| Create physics | `model.component("comp1").physics().create("ewfd", "ElectromagneticWavesFrequencyDomain", "geom1");` |
+| Create mesh | `model.component("comp1").mesh().create("mesh1");` |
+| Run geometry | `model.component("comp1").geom("geom1").run();` |
+| Run mesh | `model.component("comp1").mesh("mesh1").run();` |
+| Save model | `model.save("model_name");` |
+
 Create a model and component:
 
 ```java
@@ -105,6 +122,80 @@ model.component("comp1").geom("geom1").feature("blk1").set("base", "center");
 model.component("comp1").geom("geom1").run();
 ```
 
+2D primitives:
+
+```java
+model.component("comp1").geom().create("geom1", 2);
+model.component("comp1").geom("geom1").lengthUnit("nm");
+
+model.component("comp1").geom("geom1").create("sq1", "Square");
+model.component("comp1").geom("geom1").feature("sq1").set("size", "500");
+model.component("comp1").geom("geom1").feature("sq1").set("base", "center");
+
+model.component("comp1").geom("geom1").create("c1", "Circle");
+model.component("comp1").geom("geom1").feature("c1").set("r", "80");
+model.component("comp1").geom("geom1").feature("c1").set("pos", new String[]{"0", "0"});
+
+model.component("comp1").geom("geom1").run();
+```
+
+3D cylinder and boolean difference:
+
+```java
+model.component("comp1").geom("geom1").create("cyl1", "Cylinder");
+model.component("comp1").geom("geom1").feature("cyl1").set("r", "80");
+model.component("comp1").geom("geom1").feature("cyl1").set("h", "220");
+model.component("comp1").geom("geom1").feature("cyl1").set("pos", new String[]{"0", "0", "-110"});
+
+model.component("comp1").geom("geom1").create("dif1", "Difference");
+model.component("comp1").geom("geom1").feature("dif1").selection("input").set("blk1");
+model.component("comp1").geom("geom1").feature("dif1").selection("input2").set("cyl1");
+model.component("comp1").geom("geom1").feature("dif1").set("keepsubtract", true);
+model.component("comp1").geom("geom1").run();
+```
+
+`Cylinder` `pos` is the bottom center, not the geometric center. `Block` with `base="center"` uses center coordinates.
+
+## Selections
+
+Box selection for faces or domains:
+
+```java
+model.component("comp1").selection().create("sel_box", "Box");
+model.component("comp1").selection("sel_box").set("entitydim", 3);
+model.component("comp1").selection("sel_box").set("xmin", "-250");
+model.component("comp1").selection("sel_box").set("xmax", "250");
+model.component("comp1").selection("sel_box").set("ymin", "-250");
+model.component("comp1").selection("sel_box").set("ymax", "250");
+model.component("comp1").selection("sel_box").set("zmin", "-110");
+model.component("comp1").selection("sel_box").set("zmax", "110");
+model.component("comp1").selection("sel_box").set("condition", "inside");
+```
+
+Use `entitydim=2` for faces and `entitydim=3` for domains in 3D. Use `entitydim=1` for boundaries in 2D.
+
+Ball selection:
+
+```java
+model.component("comp1").selection().create("sel_ball", "Ball");
+model.component("comp1").selection("sel_ball").set("entitydim", 3);
+model.component("comp1").selection("sel_ball").set("posx", "0");
+model.component("comp1").selection("sel_ball").set("posy", "0");
+model.component("comp1").selection("sel_ball").set("posz", "0");
+model.component("comp1").selection("sel_ball").set("r", "50");
+model.component("comp1").selection("sel_ball").set("condition", "intersects");
+```
+
+For elongated domains, prefer `condition="intersects"` over `inside`; `inside` requires the entire domain to fit in the selection volume.
+
+Union selection:
+
+```java
+model.component("comp1").selection().create("sel_pair", "Union");
+model.component("comp1").selection("sel_pair").set("entitydim", 2);
+model.component("comp1").selection("sel_pair").set("input", new String[]{"sel_a", "sel_b"});
+```
+
 Assign a default material before overrides:
 
 ```java
@@ -121,6 +212,54 @@ model.component("comp1").material("mat_default").propertyGroup("def")
      .set("relpermittivity", new String[]{"(n_mat+k_mat*i)^2"});
 ```
 
+There is no reliable Java API material-database shortcut in the verified local profile. Avoid `materialRef()`, `MaterialUtil.addMaterial()`, and `model.materialDatabase()`; define properties manually or use interpolation/table data.
+
+## Physics Syntax
+
+Electromagnetic Waves, Frequency Domain:
+
+```java
+model.component("comp1").physics().create("ewfd", "ElectromagneticWavesFrequencyDomain", "geom1");
+```
+
+Periodic condition on a boundary or face pair:
+
+```java
+model.component("comp1").physics("ewfd").create("pc1", "PeriodicCondition", 2);
+model.component("comp1").physics("ewfd").feature("pc1").selection().named("sel_pair");
+model.component("comp1").physics("ewfd").feature("pc1").set("PeriodicType", "Floquet");
+model.component("comp1").physics("ewfd").feature("pc1").set("kFloquet", new String[]{"kx", "0", "0"});
+```
+
+Use dimension argument `1` for 2D boundaries and `2` for 3D faces.
+
+Scattering boundary condition:
+
+```java
+model.component("comp1").physics("ewfd").create("sctr1", "Scattering", 2);
+model.component("comp1").physics("ewfd").feature("sctr1").selection().named("sel_zmax");
+model.component("comp1").physics("ewfd").feature("sctr1").set("Order", "SecondOrder");
+```
+
+Feature type is `"Scattering"`, not `"ScatteringBoundaryCondition"`.
+
+PML coordinate system:
+
+```java
+model.component("comp1").coordSystem().create("pml1", "PML");
+model.component("comp1").coordSystem("pml1").selection().named("sel_pml");
+model.component("comp1").coordSystem("pml1").set("ScalingType", "Cartesian");
+```
+
+Far-field domain and child calculation:
+
+```java
+model.component("comp1").physics("ewfd").create("ffd1", "FarFieldDomain", 3);
+model.component("comp1").physics("ewfd").feature("ffd1").selection().named("sel_farfield_domain");
+model.component("comp1").physics("ewfd").feature("ffd1").feature("ffc1").set("FarName", "Efar");
+model.component("comp1").physics("ewfd").feature("ffd1").feature("ffc1").selection().named("sel_farfield_boundary");
+```
+
 Create an eigenfrequency study:
 
 ```java
@@ -133,6 +272,30 @@ model.sol().create("sol1");
 model.sol("sol1").createAutoSequence("std1");
 model.sol("sol1").runAll();
 ```
+
+## Mesh Syntax
+
+Generic automatic mesh:
+
+```java
+model.component("comp1").mesh().create("mesh1");
+model.component("comp1").mesh("mesh1").autoMeshSize(3);
+model.component("comp1").mesh("mesh1").run();
+```
+
+Explicit free tetrahedral mesh:
+
+```java
+model.component("comp1").mesh().create("mesh1");
+model.component("comp1").mesh("mesh1").create("ftet1", "FreeTet");
+model.component("comp1").mesh("mesh1").feature("ftet1").create("size1", "Size");
+model.component("comp1").mesh("mesh1").feature("ftet1").feature("size1").set("hauto", 4);
+model.component("comp1").mesh("mesh1").feature("ftet1").feature("size1").set("hmax", "100[nm]");
+model.component("comp1").mesh("mesh1").feature("ftet1").feature("size1").set("hmin", "10[nm]");
+model.component("comp1").mesh("mesh1").run();
+```
+
+Use explicit `FreeTet` sizing for thin 3D stacks or highly unequal dimensions.
 
 Export global results:
 
@@ -153,6 +316,39 @@ model.result().export("tbl_export").set("table", "tbl1");
 model.result().export("tbl_export").set("filename", "results.txt");
 model.result().export("tbl_export").run();
 ```
+
+Dataset selection matters when a model has multiple studies or solution sequences:
+
+```java
+model.result().numerical().create("gev2", "EvalGlobal");
+model.result().numerical("gev2").set("data", "dset2");
+model.result().numerical("gev2").set("expr", new String[]{"real(freq)"});
+```
+
+Set the dataset before `setResult()`.
+
+Volume integral export:
+
+```java
+model.result().numerical().create("iv1", "IntVolume");
+model.result().numerical("iv1").set("data", "dset1");
+model.result().numerical("iv1").selection().named("sel_region");
+model.result().numerical("iv1").set("expr", new String[]{"ewfd.normE^2"});
+```
+
+Useful eigenfrequency expressions:
+
+```java
+new String[]{
+    "real(freq)",
+    "imag(freq)",
+    "c_const/real(freq)/1[nm]",
+    "ewfd.Qfactor",
+    "abs(real(freq)/(2*imag(freq)))"
+}
+```
+
+Use global `freq` for complex-frequency formula cross-checks. Some model exports expose `ewfd.Qfactor`; if it is unavailable, compute `abs(real(freq)/(2*imag(freq)))`.
 
 ## Far-Field Function Export
 

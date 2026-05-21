@@ -13,8 +13,8 @@ Use this skill to make Codex operate local COMSOL and Ansys Lumerical solver ins
 
 1. Identify the requested backend: `comsol`, `lumerical-fdtd`, `lumerical-mode`, or mixed.
 2. Load only the needed reference:
-   - COMSOL batch, Java API, or table export: `references/comsol-automation.md`.
-   - Lumerical FDTD/MODE, `lumapi`, or LSF CLI: `references/lumerical-fdtd-automation.md`.
+   - COMSOL batch, Java API, geometry, physics, mesh, dataset, or table export syntax: `references/comsol-automation.md`.
+   - Lumerical FDTD/MODE, `lumapi`, object creation, monitor, Qanalysis, material, or LSF CLI syntax: `references/lumerical-fdtd-automation.md`.
    - Local profile names and expected executable paths: `references/solver-profiles.json`.
 3. Probe before real work unless the same profile was verified in the current session.
 4. Normalize the Windows environment before launching solver binaries.
@@ -52,6 +52,7 @@ C:\ProgramData\anaconda3\envs\AI_group\python.exe scripts/probe_lumerical.py --d
 - Avoid MPh Python on the recorded Windows installation because it was observed to crash.
 - Use table-format `-paramfile`, not key-value format.
 - If a Java postprocessor loads a model from another directory, use explicit output paths for table exports.
+- For syntax-sensitive work, read the COMSOL reference before writing Java API calls. It contains verified patterns for `Block`, `Cylinder`, `Difference`, `Box`, `Ball`, `Union`, `ElectromagneticWavesFrequencyDomain`, `Scattering`, PML coordinate systems, `FreeTet`, `EvalGlobal`, `IntVolume`, and table export.
 
 ## Lumerical Defaults
 
@@ -60,6 +61,7 @@ C:\ProgramData\anaconda3\envs\AI_group\python.exe scripts/probe_lumerical.py --d
 - Prepend the Lumerical `bin` and `licensingclient/winx64` directories to `PATH`.
 - Keep `fdtd-solutions.exe -run <script.lsf>` as a CLI fallback.
 - Use `.txt` as the safe LSF sentinel/export extension, then convert to JSON in Python if needed.
+- For syntax-sensitive work, read the Lumerical reference before writing Python or LSF calls. It contains verified patterns for `addrect`, `addcircle`, `addring`, `addfdtd`, `addpower`, `addanalysisgroup`, `addobject("Qanalysis")`, `setnamed`, `getresult`, `getdata`, `farfield3d`, sampled materials, and LSF setup scripts.
 
 ## Failure Repair
 
