@@ -1,0 +1,37 @@
+{
+  "comsol": {
+    "preferred_profile": "comsol-batch-basic",
+    "profiles": [
+      {
+        "name": "comsol-batch-basic",
+        "status": "verified",
+        "type": "command",
+        "executable": "C:\\Program Files\\COMSOL\\COMSOL63\\Multiphysics\\bin\\win64\\comsolbatch.exe",
+        "compiler": "C:\\Program Files\\COMSOL\\COMSOL63\\Multiphysics\\bin\\win64\\comsolcompile.exe",
+        "version": "6.3.0.290",
+        "command": "{executable} -inputfile {input_file} -outputfile {output_file} -study {study}"
+      }
+    ]
+  },
+  "lumerical": {
+    "preferred_profile": "lumapi-python-v241-local-license",
+    "profiles": [
+      {
+        "name": "lumapi-python-v241-local-license",
+        "status": "verified",
+        "type": "python",
+        "api_path": "C:\\Program Files\\Lumerical\\v241\\api\\python\\lumapi.py",
+        "product": "FDTD",
+        "license_server": "1055@localhost",
+        "server_args": {}
+      },
+      {
+        "name": "lumerical-v241-cli-lsf",
+        "status": "verified",
+        "type": "cli_lsf",
+        "executable": "C:\\Program Files\\Lumerical\\v241\\bin\\fdtd-solutions.exe",
+        "license_server": "1055@localhost"
+      }
+    ]
+  }
+}

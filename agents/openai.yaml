@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex for COMSOL and Lumerical"
+  short_description: "Connect Codex to COMSOL and Lumerical FDTD safely."
+  default_prompt: "Use $codex-for-comsol-lumerical to probe local COMSOL and Lumerical FDTD automation before running solver jobs."
