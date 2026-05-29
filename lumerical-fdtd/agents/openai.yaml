@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lumerical FDTD"
+  short_description: "Probe and automate Ansys Lumerical FDTD with Python API or CLI LSF."
+  default_prompt: "Use $lumerical-fdtd to probe FDTD automation before running solver scripts."

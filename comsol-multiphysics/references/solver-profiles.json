@@ -1,0 +1,30 @@
+{
+  "comsol": {
+    "preferred_profile": "comsol-batch-local-auto",
+    "profiles": [
+      {
+        "name": "comsol-batch-local-auto",
+        "status": "local-default",
+        "type": "command",
+        "bin_discovery_order": [
+          "COMSOL_BIN",
+          "COMSOL_ROOT",
+          "D:\\COMSOL",
+          "C:\\Program Files\\COMSOL"
+        ],
+        "recorded_local_bin": "D:\\COMSOL\\COMSOL62\\Multiphysics\\bin\\win64",
+        "batch_executable": "comsolbatch.exe",
+        "compiler_executable": "comsolcompile.exe",
+        "verification": "Run scripts/probe_comsol.ps1 locally before trusting this profile."
+      },
+      {
+        "name": "comsol-mph-python-runtime",
+        "status": "runtime",
+        "type": "python_mph",
+        "adapter": "scripts/comsol_mph_tool.py",
+        "runtime": "scripts/comsol_mcp_runtime",
+        "verification": "Use a Python environment with mph and mcp installed, then run scripts/comsol_mph_tool.py list-tools."
+      }
+    ]
+  }
+}

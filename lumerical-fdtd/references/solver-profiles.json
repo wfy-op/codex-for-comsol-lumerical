@@ -1,0 +1,30 @@
+{
+  "lumerical": {
+    "preferred_profile": "lumapi-python-fdtd-example",
+    "profiles": [
+      {
+        "name": "lumapi-python-fdtd-example",
+        "status": "example",
+        "type": "python",
+        "api_path_env": "LUMERICAL_PYTHON_API",
+        "api_path": "%LUMERICAL_PYTHON_API%",
+        "product": "FDTD",
+        "license_env": "ANSYSLMD_LICENSE_FILE",
+        "license_server": "%ANSYSLMD_LICENSE_FILE%",
+        "server_args": {},
+        "verification": "Run scripts/probe_lumerical.py locally before trusting this profile."
+      },
+      {
+        "name": "lumerical-fdtd-cli-lsf-example",
+        "status": "candidate",
+        "type": "cli_lsf",
+        "executable_env": "LUMERICAL_FDTD_EXECUTABLE",
+        "executable": "%LUMERICAL_FDTD_EXECUTABLE%",
+        "license_env": "ANSYSLMD_LICENSE_FILE",
+        "license_server": "%ANSYSLMD_LICENSE_FILE%",
+        "command": "{executable} -hide -run {script_file} -exit",
+        "verification": "Use this only as a fallback when lumapi startup is blocked; run a sentinel LSF probe first."
+      }
+    ]
+  }
+}
