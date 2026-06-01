@@ -1,0 +1,4 @@
+interface:
+  display_name: "COMSOL Multiphysics"
+  short_description: "Probe and automate COMSOL with CLI, Java API, Python mph, and docs."
+  default_prompt: "Use $comsol-multiphysics to probe COMSOL and inspect a model safely before running solver jobs."
