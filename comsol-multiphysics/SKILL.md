@@ -23,14 +23,19 @@ Keep the scope to solver connection, model/session management, parameter edits, 
 2. Decide which backend is needed:
    - Use the command-line backend for installation probes, Java API builders, batch runs, table exports, and robust local smoke tests.
    - Use the Python `mph` backend for interactive model/session tools, existing model inspection, parameter management, geometry/physics/mesh/study/result utilities, and documentation helpers.
-3. Load only the needed reference:
+3. Discover local paths before assuming any profile:
+   - Prefer explicit user-provided paths.
+   - Then check `COMSOL_BIN`, `COMSOL_ROOT`, `COMSOL_HOME`, `COMSOL_MPH_PYTHON`, `PYTHON`, and the current `PATH`.
+   - Then scan common COMSOL installation roots for the newest version folder.
+   - If no Python environment can import `mph` and `mcp`, ask for or create an appropriate environment instead of using a machine-specific path.
+4. Load only the needed reference:
    - Java API, batch, geometry, physics, mesh, result, dataset, or table export syntax: `references/comsol-automation.md`.
    - Example local profile structure: `references/solver-profiles.json`.
-4. Probe before real work unless the same backend already passed in the current session.
-5. Normalize the local solver environment before launching binaries.
-6. Run the smallest viable operation first: version check, import check, session start, model load, or compile/run/save probe.
-7. Store raw stdout/stderr, generated scripts, result files, and probe JSON near the caller's job artifacts, not inside this skill.
-8. If a solver call fails, classify the signature, propose the smallest patch, retry once when safe, then report the exact command and artifacts.
+5. Probe before real work unless the same backend already passed in the current session.
+6. Normalize the local solver environment before launching binaries.
+7. Run the smallest viable operation first: version check, import check, session start, model load, or compile/run/save probe.
+8. Store raw stdout/stderr, generated scripts, result files, and probe JSON near the caller's job artifacts, not inside this skill.
+9. If a solver call fails, classify the signature, propose the smallest patch, retry once when safe, then report the exact command and artifacts.
 
 ## Quick Commands
 
@@ -52,19 +57,15 @@ bash "$skill/scripts/probe_comsol.sh" --dry-run --out-dir "$out"
 bash "$skill/scripts/probe_comsol.sh" --deep --out-dir "$out"
 ```
 
-The probe auto-discovers common Windows installs and honors `COMSOL_BIN` or `COMSOL_ROOT`. On the recorded local machine the working binary folder is:
-
-```text
-D:\COMSOL\COMSOL62\Multiphysics\bin\win64
-```
+The probe auto-discovers common Windows installs and honors `COMSOL_BIN`, `COMSOL_ROOT`, `COMSOL_HOME`, and binaries already available on `PATH`. Treat the resolved path as session-local evidence, not as a portable profile.
 
 Python runtime adapter:
 
 ```powershell
-$python = "C:\Users\w1278\Desktop\COMSOL_Multiphysics_MCP-main\.venv\Scripts\python.exe"
+$python = "<python-that-can-import-mph-and-mcp>"
 $skill = "C:\path\to\comsol-multiphysics"
 & $python "$skill\scripts\comsol_mph_tool.py" list-tools
-& $python "$skill\scripts\comsol_mph_tool.py" tool model_load --json "{\"file_path\":\"E:\\comsol\\2D_TE_suna.mph\",\"set_current\":true}"
+& $python "$skill\scripts\comsol_mph_tool.py" tool model_load --json "{\"file_path\":\"C:\\path\\to\\model.mph\",\"set_current\":true}"
 & $python "$skill\scripts\comsol_mph_tool.py" resource "comsol://session/info"
 ```
 
@@ -92,8 +93,8 @@ Run the bundled validation script from a caller workspace:
 $skill = "C:\path\to\comsol-multiphysics"
 powershell -ExecutionPolicy Bypass -File "$skill\scripts\validate_comsol_skill.ps1" `
   -SkillDir "$skill" `
-  -Python "C:\Users\w1278\Desktop\COMSOL_Multiphysics_MCP-main\.venv\Scripts\python.exe" `
-  -ModelPath "E:\comsol\2D_TE_suna.mph"
+  -Python "<python-that-can-import-mph-and-mcp>" `
+  -ModelPath "C:\path\to\model.mph"
 ```
 
 Git Bash or Linux validation:
@@ -106,7 +107,7 @@ bash "$skill/scripts/validate_comsol_skill.sh" \
   --model-path "/path/to/model.mph"
 ```
 
-The validation script must not save over the supplied model. It may load, inspect, list parameters, read resources, and remove the model from memory.
+`-Python` and `-ModelPath` are optional discovery inputs. Without `-ModelPath`, validation should still check skill structure, COMSOL probe behavior, runtime imports, and adapter registration. With a supplied model, the validation script must not save over the model; it may load, inspect, list parameters, read resources, and remove the model from memory.
 
 ## Common Mistakes
 

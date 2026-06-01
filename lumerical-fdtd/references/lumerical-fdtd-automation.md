@@ -4,7 +4,7 @@ Use this reference for Ansys Lumerical FDTD `lumapi`, FDTD session startup, LSF 
 
 ## Contents
 
-- Recorded local example
+- Local discovery and profiles
 - Environment normalization and import
 - Session lifecycle
 - Object creation and v241 local workarounds
@@ -14,13 +14,13 @@ Use this reference for Ansys Lumerical FDTD `lumapi`, FDTD session startup, LSF 
 - Sampled material data
 - Failure signatures
 
-## Recorded Local Example
+## Local Discovery and Profiles
 
 - Preferred Python API profile: `lumapi-python-fdtd-example`
-- API path: `C:\Program Files\Lumerical\v241\api\python\lumapi.py`
-- CLI fallback: `C:\Program Files\Lumerical\v241\bin\fdtd-solutions.exe`
-- Example local license value: `1055@localhost`
-- Treat this as a syntax example, not proof that another machine is ready. Probe the local installation first.
+- API path source: explicit user input, `LUMERICAL_PYTHON_API`, or the probe script's install-root scan.
+- CLI fallback source: explicit user input, `LUMERICAL_FDTD_EXECUTABLE`, or the probe script's install-root scan.
+- License source: explicit user input or `ANSYSLMD_LICENSE_FILE`.
+- Treat any discovered path as local evidence only. Probe the local installation before running production scripts.
 
 ## Environment Normalization
 
@@ -31,7 +31,12 @@ import os
 import socket
 from pathlib import Path
 
-api_path = Path(os.environ.get("LUMERICAL_PYTHON_API", r"C:\Program Files\Lumerical\v241\api\python\lumapi.py"))
+api_env = os.environ.get("LUMERICAL_PYTHON_API")
+if not api_env:
+    raise RuntimeError("Set LUMERICAL_PYTHON_API or run scripts/probe_lumerical.py to discover lumapi.py")
+api_path = Path(api_env)
+if not api_path.exists():
+    raise FileNotFoundError("Set LUMERICAL_PYTHON_API or run the probe script to discover lumapi.py")
 install_root = api_path.parents[2]
 os.environ["PATH"] = os.pathsep.join([
     str(install_root / "bin"),
@@ -41,7 +46,6 @@ os.environ["PATH"] = os.pathsep.join([
 os.environ["Path"] = os.environ["PATH"]
 os.environ.setdefault("LUMERICAL_ROOT", str(install_root))
 os.environ.setdefault("LUMERICAL_PYTHON_API", str(api_path))
-os.environ["ANSYSLMD_LICENSE_FILE"] = os.environ.get("ANSYSLMD_LICENSE_FILE", "1055@localhost")
 os.environ.setdefault("COMPUTERNAME", socket.gethostname().split(".")[0])
 ```
 
@@ -49,7 +53,7 @@ Import:
 
 ```python
 import sys
-sys.path.insert(0, r"C:\Program Files\Lumerical\v241\api\python")
+sys.path.insert(0, str(api_path.parent))
 import lumapi
 ```
 
@@ -79,7 +83,7 @@ fdtd = lumapi.FDTD(serverArgs={"platform": "offscreen"})
 
 ## Object Creation
 
-Use attribute assignment or session-level `setnamed`. On one recorded v241 local profile, `SimObject` wrappers did not expose a reliable `obj.set(...)`; treat this as a local workaround, not a universal Lumerical rule.
+Use attribute assignment or session-level `setnamed`. On some v241 profiles, `SimObject` wrappers did not expose a reliable `obj.set(...)`; treat this as a local workaround, not a universal Lumerical rule.
 
 ## lumapi Syntax Map
 
@@ -153,7 +157,7 @@ except Exception:
     fdtd.setnamed("layer_1", "mesh order", 3)
 ```
 
-On one recorded v241 local profile, renaming the object returned by `addfdtd()` was unreliable. When this local behavior appears, keep the default region name and use the returned object id.
+On some v241 profiles, renaming the object returned by `addfdtd()` was unreliable. When this local behavior appears, keep the default region name and use the returned object id.
 
 ```python
 region = fdtd.addfdtd()
@@ -207,7 +211,8 @@ fdtd.setnamed("::model::group_1::member_1", "mesh order", 2)
 Use CLI LSF runs when Python API session startup is blocked:
 
 ```powershell
-& 'C:\Program Files\Lumerical\v241\bin\fdtd-solutions.exe' -hide -run .\script.lsf -exit
+$fdtdExe = "<resolved fdtd-solutions executable>"
+& $fdtdExe -hide -run .\script.lsf -exit
 ```
 
 Use `-trust-script` only when the script needs trusted filesystem/resource access and the script source is known.

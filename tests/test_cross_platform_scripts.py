@@ -39,6 +39,28 @@ class CrossPlatformScriptTests(unittest.TestCase):
         self.assertIn("Detect the operating system first", lumerical)
         self.assertIn("probe_lumerical.sh", lumerical)
 
+    def test_public_docs_do_not_publish_machine_specific_paths(self):
+        banned_patterns = [
+            r"C:\\Users\\w1278",
+            r"E:\\comsol\\2D_TE_suna\.mph",
+            r"D:\\COMSOL\\COMSOL62",
+            r"COMSOL_Multiphysics_MCP-main",
+            r"Recorded local",
+            r"recorded_local",
+        ]
+        public_docs = [
+            "README.md",
+            "comsol-multiphysics/SKILL.md",
+            "comsol-multiphysics/references/comsol-automation.md",
+            "comsol-multiphysics/references/solver-profiles.json",
+            "lumerical-fdtd/references/lumerical-fdtd-automation.md",
+        ]
+        for path in public_docs:
+            content = read(path)
+            for pattern in banned_patterns:
+                with self.subTest(path=path, pattern=pattern):
+                    self.assertNotRegex(content, pattern)
+
 
 if __name__ == "__main__":
     unittest.main()

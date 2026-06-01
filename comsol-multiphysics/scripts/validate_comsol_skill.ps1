@@ -1,7 +1,7 @@
 param(
     [string]$SkillDir = (Split-Path -Parent $PSScriptRoot),
     [string]$Python = "",
-    [string]$ModelPath = "E:\comsol\2D_TE_suna.mph",
+    [string]$ModelPath = "",
     [string]$ComsolBin = "",
     [string]$OutDir = ".\solver_probe_out\comsol_skill_validation",
     [switch]$Deep
@@ -30,15 +30,32 @@ function Resolve-RequiredPath {
 }
 
 function Resolve-Python {
-    param([string]$ExplicitPython)
+    param([string]$ExplicitPython, [string]$SkillRoot)
 
     if ($ExplicitPython) {
         return (Resolve-RequiredPath -Path $ExplicitPython -Label "Python")
     }
 
-    $localMcpPython = "C:\Users\w1278\Desktop\COMSOL_Multiphysics_MCP-main\.venv\Scripts\python.exe"
-    if (Test-Path -LiteralPath $localMcpPython) {
-        return (Resolve-Path -LiteralPath $localMcpPython).Path
+    $pythonCandidates = New-Object System.Collections.Generic.List[string]
+    if ($env:COMSOL_MPH_PYTHON) {
+        [void]$pythonCandidates.Add($env:COMSOL_MPH_PYTHON)
+    }
+    if ($env:PYTHON) {
+        [void]$pythonCandidates.Add($env:PYTHON)
+    }
+    if ($env:VIRTUAL_ENV) {
+        [void]$pythonCandidates.Add((Join-Path $env:VIRTUAL_ENV "Scripts\python.exe"))
+        [void]$pythonCandidates.Add((Join-Path $env:VIRTUAL_ENV "bin/python"))
+    }
+    if ($SkillRoot) {
+        [void]$pythonCandidates.Add((Join-Path $SkillRoot ".venv\Scripts\python.exe"))
+        [void]$pythonCandidates.Add((Join-Path $SkillRoot ".venv/bin/python"))
+    }
+
+    foreach ($candidate in $pythonCandidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
     }
 
     $command = Get-Command python -ErrorAction SilentlyContinue
@@ -46,7 +63,12 @@ function Resolve-Python {
         return $command.Source
     }
 
-    throw "No Python interpreter found. Pass -Python with an environment that can import mph and mcp."
+    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyLauncher) {
+        return $pyLauncher.Source
+    }
+
+    throw "No Python interpreter found. Pass -Python or set COMSOL_MPH_PYTHON with an environment that can import mph and mcp."
 }
 
 function Invoke-CheckedCommand {
@@ -63,8 +85,11 @@ $skillRoot = Resolve-RequiredPath -Path $SkillDir -Label "SkillDir"
 $probeScript = Resolve-RequiredPath -Path (Join-Path $skillRoot "scripts\probe_comsol.ps1") -Label "probe_comsol.ps1"
 $adapterScript = Resolve-RequiredPath -Path (Join-Path $skillRoot "scripts\comsol_mph_tool.py") -Label "comsol_mph_tool.py"
 $runtimeDir = Resolve-RequiredPath -Path (Join-Path $skillRoot "scripts\comsol_mcp_runtime") -Label "comsol_mcp_runtime"
-$modelFile = Resolve-RequiredPath -Path $ModelPath -Label "ModelPath"
-$pythonExe = Resolve-Python -ExplicitPython $Python
+$modelFile = $null
+if ($ModelPath) {
+    $modelFile = Resolve-RequiredPath -Path $ModelPath -Label "ModelPath"
+}
+$pythonExe = Resolve-Python -ExplicitPython $Python -SkillRoot $skillRoot
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $resolvedOut = (Resolve-Path -LiteralPath $OutDir).Path
@@ -100,8 +125,9 @@ Invoke-CheckedCommand -Label "Adapter registry listing" -Command {
     & $pythonExe $adapterScript list-tools | Tee-Object -FilePath (Join-Path $resolvedOut "adapter_list_tools.json")
 }
 
-$modelValidationScript = Join-Path $resolvedOut "validate_mph_model.py"
-@'
+if ($modelFile) {
+    $modelValidationScript = Join-Path $resolvedOut "validate_mph_model.py"
+    @'
 import json
 import sys
 from pathlib import Path
@@ -143,9 +169,16 @@ finally:
 print(json.dumps({"success": True, "model_path": str(model_path), "results": results}, indent=2, default=str))
 '@ | Set-Content -Encoding UTF8 -Path $modelValidationScript
 
-Invoke-CheckedCommand -Label "MPh model load and inspect validation" -Command {
-    & $pythonExe $modelValidationScript $adapterScript $modelFile |
-        Tee-Object -FilePath (Join-Path $resolvedOut "mph_model_validation.json")
+    Invoke-CheckedCommand -Label "MPh model load and inspect validation" -Command {
+        & $pythonExe $modelValidationScript $adapterScript $modelFile |
+            Tee-Object -FilePath (Join-Path $resolvedOut "mph_model_validation.json")
+    }
+} else {
+    [ordered]@{
+        success = $true
+        skipped = $true
+        reason = "No -ModelPath supplied; skipped model load and inspect validation."
+    } | ConvertTo-Json -Depth 5 | Tee-Object -FilePath (Join-Path $resolvedOut "mph_model_validation.json")
 }
 
 $pdfCount = (Get-ChildItem -Path (Join-Path $runtimeDir "pdf") -Recurse -Filter "*.pdf" | Measure-Object).Count

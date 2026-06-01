@@ -21,31 +21,51 @@ if (-not (Test-WindowsHost)) {
 function Find-ComsolBin {
     $candidates = New-Object System.Collections.Generic.List[string]
 
-    if ($env:COMSOL_BIN) {
-        [void]$candidates.Add($env:COMSOL_BIN)
-    }
-    if ($env:COMSOL_ROOT) {
-        [void]$candidates.Add((Join-Path $env:COMSOL_ROOT "Multiphysics\bin\win64"))
-        [void]$candidates.Add((Join-Path $env:COMSOL_ROOT "bin\win64"))
+    function Add-Candidate {
+        param([string]$Path)
+        if (-not $Path) { return }
+        if (-not ($candidates -contains $Path)) {
+            [void]$candidates.Add($Path)
+        }
     }
 
-    $roots = @(
-        "D:\COMSOL",
-        "C:\Program Files\COMSOL"
-    )
+    if ($env:COMSOL_BIN) {
+        Add-Candidate $env:COMSOL_BIN
+    }
+    foreach ($rootEnv in @($env:COMSOL_ROOT, $env:COMSOL_HOME, $env:COMSOL_INSTALL_ROOT)) {
+        if ($rootEnv) {
+            Add-Candidate (Join-Path $rootEnv "Multiphysics\bin\win64")
+            Add-Candidate (Join-Path $rootEnv "bin\win64")
+        }
+    }
+
+    $batchCommand = Get-Command comsolbatch.exe -ErrorAction SilentlyContinue
+    $compileCommand = Get-Command comsolcompile.exe -ErrorAction SilentlyContinue
+    if ($batchCommand -and $compileCommand) {
+        Add-Candidate (Split-Path -Parent $batchCommand.Source)
+    }
+
+    $roots = New-Object System.Collections.Generic.List[string]
+    [void]$roots.Add("D:\COMSOL")
+    foreach ($programRoot in @($env:ProgramFiles, [Environment]::GetEnvironmentVariable("ProgramFiles(x86)"))) {
+        if ($programRoot) {
+            [void]$roots.Add((Join-Path $programRoot "COMSOL"))
+        }
+    }
+    [void]$roots.Add("/opt/comsol")
+    [void]$roots.Add("/usr/local/comsol")
+
     foreach ($root in $roots) {
         if (Test-Path $root) {
             Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
                 Sort-Object Name -Descending |
                 ForEach-Object {
-                    [void]$candidates.Add((Join-Path $_.FullName "Multiphysics\bin\win64"))
+                    Add-Candidate (Join-Path $_.FullName "Multiphysics\bin\win64")
+                    Add-Candidate (Join-Path $_.FullName "bin\win64")
+                    Add-Candidate (Join-Path $_.FullName "bin")
                 }
         }
     }
-
-    [void]$candidates.Add("D:\COMSOL\COMSOL62\Multiphysics\bin\win64")
-    [void]$candidates.Add("C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64")
-    [void]$candidates.Add("C:\Program Files\COMSOL\COMSOL62\Multiphysics\bin\win64")
 
     foreach ($candidate in $candidates) {
         if (-not $candidate) { continue }
@@ -56,7 +76,10 @@ function Find-ComsolBin {
         }
     }
 
-    return $candidates[0]
+    if ($candidates.Count -gt 0) {
+        return $candidates[0]
+    }
+    return ""
 }
 
 function Set-ComsolEnv {
@@ -198,6 +221,24 @@ function Invoke-ProbeCommand {
 
 if (-not $ComsolBin) {
     $ComsolBin = Find-ComsolBin
+}
+
+if (-not $ComsolBin) {
+    $payload = [ordered]@{
+        backend = "comsol"
+        probe_level = $(if ($DryRun) { "dry_run" } elseif ($Deep) { "deep_compile_run_save" } else { "version_check" })
+        dry_run = [bool]$DryRun
+        comsol_batch = $null
+        comsol_compile = $null
+        checks = @([ordered]@{
+            name = "path_resolution"
+            success = $false
+            message = "Could not find COMSOL binaries. Pass -ComsolBin or set COMSOL_BIN, COMSOL_ROOT, or COMSOL_HOME."
+        })
+        success = $false
+    }
+    $payload | ConvertTo-Json -Depth 8
+    exit 1
 }
 
 $comsolBatch = Join-Path $ComsolBin "comsolbatch.exe"

@@ -4,7 +4,7 @@ Use this reference for local COMSOL connection checks, Java API probes, batch ru
 
 ## Contents
 
-- Recorded local example
+- Local discovery and profiles
 - Windows environment normalization
 - Command line
 - Minimal Java API probe
@@ -17,14 +17,19 @@ Use this reference for local COMSOL connection checks, Java API probes, batch ru
 - Far-field function export
 - Failure signatures
 
-## Recorded Local Example
+## Local Discovery and Profiles
 
-- COMSOL: `6.3.0.290`
-- Batch executable: `C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolbatch.exe`
-- Java compiler wrapper: `C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolcompile.exe`
-- Preferred workflow: write Java API file, compile with `comsolcompile.exe`, run the `.class` with `comsolbatch.exe`.
-- Avoid MPh Python on the recorded Windows installation because it was observed to crash.
-- Treat this as a recorded example, not a portable ready-to-use profile. Run `scripts/probe_comsol.ps1` locally before trusting a profile.
+Prefer discovery over fixed paths. Resolve COMSOL in this order:
+
+1. Use a path explicitly provided by the user for this task.
+2. Check `COMSOL_BIN`, `COMSOL_ROOT`, and `COMSOL_HOME`.
+3. Check whether `comsolbatch` and `comsolcompile` are already available on `PATH`.
+4. Scan common installation roots and choose a version folder that contains both binaries.
+5. Run `scripts/probe_comsol.ps1` or `scripts/probe_comsol.sh` before trusting the profile.
+
+Preferred command-line workflow: write a Java API file, compile with `comsolcompile`, run the `.class` with `comsolbatch`, then verify the expected output artifact exists.
+
+Use the Python `mph` adapter only from an environment that can import both `mph` and `mcp`. Discover the interpreter from an explicit user path, `COMSOL_MPH_PYTHON`, `PYTHON`, an active virtual environment, or `PATH`.
 
 ## Windows Environment Normalization
 
@@ -48,10 +53,10 @@ TEMP
 TMP
 ```
 
-Prepend these paths to `PATH`:
+Prepend these paths to `PATH` after resolving the COMSOL binary directory:
 
 ```text
-C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64
+<COMSOL_BIN>
 C:\Windows\System32
 C:\Windows
 C:\Windows\System32\Wbem
@@ -61,11 +66,13 @@ C:\Windows\System32\WindowsPowerShell\v1.0
 ## Command Line
 
 ```powershell
-& 'C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolbatch.exe' -version
-& 'C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolcompile.exe' .\ComsolProbeMinimal.java
-& 'C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolbatch.exe' -inputfile .\ComsolProbeMinimal.class
-& 'C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolbatch.exe' -inputfile model.mph -outputfile output.mph -study std1
-& 'C:\Program Files\COMSOL\COMSOL63\Multiphysics\bin\win64\comsolbatch.exe' -inputfile model.mph -outputfile output.mph -study std1 -paramfile params.txt
+$comsolBatch = Join-Path $ComsolBin "comsolbatch.exe"
+$comsolCompile = Join-Path $ComsolBin "comsolcompile.exe"
+& $comsolBatch -version
+& $comsolCompile .\ComsolProbeMinimal.java
+& $comsolBatch -inputfile .\ComsolProbeMinimal.class
+& $comsolBatch -inputfile model.mph -outputfile output.mph -study std1
+& $comsolBatch -inputfile model.mph -outputfile output.mph -study std1 -paramfile params.txt
 ```
 
 `-paramfile` expects table format:
